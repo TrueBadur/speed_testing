@@ -1,10 +1,10 @@
 NAME = test_speed
 
 FILES=main.cpp
-OPTIMISATION_LVL= -O3
-AVX_FLAGS= -mavx
-CC_FLAGS = -std=c++17 
+OPTIMISATION_LVL= -O0
+CC_FLAGS = -std=c++17
 CC = clang++
+AVX_FLAGS= -march=native -mtune=native
 
 CORE_ISOLATE = 1
 
