@@ -207,7 +207,7 @@ void proceed_data(std::vector<uint64_t>& inputs, StructResult& str_res)
 	str_res.std = sqrt(variance);
 	std::cout << "\tMin value: " << min << "\n";
 	std::cout << "\tMax value: " << max << "\n";
-	std::cout << "\tMean value: " << mean << "\n";
+	std::cout << "\tMean value: " << str_res.mean << "\n";
 	std::cout << "\tVariance: " << variance << "\n";
 	std::cout << "\tSTD: " << std << std::endl;
 }
