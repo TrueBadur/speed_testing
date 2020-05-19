@@ -4,7 +4,7 @@ FILES=main.cpp
 OPTIMISATION_LVL= -O3
 AVX_FLAGS= -mavx
 CC_FLAGS = -std=c++17 
-CC = clang
+CC = clang++
 
 CORE_ISOLATE = 1
 
