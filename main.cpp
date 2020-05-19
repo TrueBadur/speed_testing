@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <immintrin.h>
 
-#define SIZE_OF_STAT 1000000
+#define SIZE_OF_STAT 100000
 #define WARM_UP_TIMES 10
 
 void inline start_count(unsigned &cycles_high, unsigned &cycles_low)
@@ -36,9 +36,14 @@ uint64_t inline convert_res(unsigned cycles_high, unsigned cycles_low)
 	return ((uint64_t) cycles_high << 32u) | cycles_low;
 }
 
-template<typename T, typename F>
+struct StructResult{
+	double mean;
+	double std;
+};
+
+template<typename T, typename S, bool CheckCopy>
 void inline
-Filltimes(std::vector<uint64_t>& times, void (*f)(F *src, F* dst), T *src, T* dst)
+Filltimes(std::vector<uint64_t>& times, void (*f)(S *src, S* dst), T *src, T* dst)
 {
 	int i;
 	uint64_t start, end;
@@ -51,11 +56,15 @@ Filltimes(std::vector<uint64_t>& times, void (*f)(F *src, F* dst), T *src, T* ds
 	for (i = 0; i < SIZE_OF_STAT; i++)
 	{
 		start_count(cycles_high, cycles_low);
-		f((F*)src, (F*)dst);
+		f((S*)src, (S*)dst);
 		stop_count(cycles_high1, cycles_low1);
 		start = convert_res(cycles_high, cycles_low);
 		end = convert_res(cycles_high1, cycles_low1);
 		times[i] = end - start;
+		if (CheckCopy && std::memcmp((char*)src, (char*)dst, sizeof(T)) != 0){
+			std::cerr << "Copy went wrong" << std::endl;
+			break;
+		}
 	}
 }
 
@@ -64,7 +73,7 @@ using NoPackMix = Test1<char, std::int64_t, std::int32_t, char, std::int64_t>;
 using PackDesc = Test2<std::int64_t, std::int64_t, std::int32_t, char, char>;
 using PackMix = Test2<char, std::int64_t, std::int32_t, char, std::int64_t>;
 using ArrStruct = Test3<std::int64_t, std::int64_t, std::int32_t, char, char>;
-using Results = std::unordered_map<std::string, std::unordered_map<std::string, std::pair<double, double>>>;
+using Results = std::unordered_map<std::string, std::unordered_map<std::string, StructResult>>;
 
 
 template<typename S>
@@ -81,7 +90,7 @@ void MemcpyTest(S* src, S* dst)
 {
 	for (int i = 0; i < 1; i++)
 	{
-		std::memcpy(src, dst, sizeof(S));
+		std::memcpy(dst, src, sizeof(S));
 	}
 }
 
@@ -89,15 +98,13 @@ template<typename S>
 void sseCopyTest(char* src, char* dst){
 	for (int i = 0; i < 1; i++){
 		char* target = src + sizeof(S);
-		for (;src < target - 16; src += 16, dst += 16){
-			__m128i buffer = _mm_load_si128((__m128i*)src);
-			_mm_store_si128((__m128i*)dst, buffer);
+		for (;src <= target - 16; src += 16, dst += 16){
+			_mm_store_si128((__m128i*)dst, *(__m128i*)src);
 		}
-		for(;src < target - 8; src += 8, dst += 8){
-			__m128i buffer = _mm_loadu_si64(src);
-			_mm_storeu_si64(dst, buffer);
+		for(;src <= target - 8; src += 8, dst += 8){
+			_mm_storeu_si64(dst, *(__m128i*)src);
 		}
-		for(;src < target - 4; src += 4, dst += 4){
+		for(;src <= target - 4; src += 4, dst += 4){
 			*(int*)dst = *(int*)src;
 		}
 		for(;src != target; src += 1, dst += 1){
@@ -110,19 +117,16 @@ template<typename S>
 inline void avxCopyTest(char* src, char* dst){
 	for (int i = 0; i < 1; i++){
 		char* target = src + sizeof(S);
-		for (;src < target - 32; src += 32, dst += 32){
-			__m256i buffer = _mm256_load_si256((__m256i*)src);
-			_mm256_store_si256((__m256i*)dst, buffer);
+		for (;src <= target - 32; src += 32, dst += 32){
+			_mm256_store_si256((__m256i*)dst, *(__m256i*)src);
 		}
-		for (;src < target - 16; src += 16, dst += 16){
-			__m128i buffer = _mm_load_si128((__m128i*)src);
-			_mm_store_si128((__m128i*)dst, buffer);
+		for (;src <= target - 16; src += 16, dst += 16){
+			_mm_store_si128((__m128i*)dst, *(__m128i*)src);
 		}
-		for(;src < target - 8; src += 8, dst += 8){
-			__m128i buffer = _mm_loadu_si64(src);
-			_mm_storeu_si64(dst, buffer);
+		for(;src <= target - 8; src += 8, dst += 8){
+			_mm_storeu_si64(dst, *(__m128i*)src);
 		}
-		for(;src < target - 4; src += 4, dst += 4){
+		for(;src <= target - 4; src += 4, dst += 4){
 			*(int*)dst = *(int*)src;
 		}
 		for(;src != target; src += 1, dst += 1){
@@ -135,19 +139,16 @@ template<typename S>
 inline void avx2CopyTest(char* src, char* dst){
 	for (int i = 0; i < 1; i++){
 		char* target = src + sizeof(S);
-		for (;src < target - 32; src += 32, dst += 32){
-			__m256i buffer = _mm256_load_si256((__m256i*)src);
-			_mm256_stream_si256((__m256i*)dst, buffer);
+		for (;src <= target - 32; src += 32, dst += 32){
+			_mm256_stream_si256((__m256i*)dst, *(__m256i*)src);
 		}
-		for (;src < target - 16; src += 16, dst += 16){
-			__m128i buffer = _mm_load_si128((__m128i*)src);
-			_mm_store_si128((__m128i*)dst, buffer);
+		for (;src <= target - 16; src += 16, dst += 16){
+			_mm_store_si128((__m128i*)dst, *(__m128i*)src);
 		}
-		for(;src < target - 8; src += 8, dst += 8){
-			__m128i buffer = _mm_loadu_si64(src);
-			_mm_storeu_si64(dst, buffer);
+		for(;src <= target - 8; src += 8, dst += 8){
+			_mm_storeu_si64(dst, *(__m128i*)src);
 		}
-		for(;src < target - 4; src += 4, dst += 4){
+		for(;src <= target - 4; src += 4, dst += 4){
 			*(int*)dst = *(int*)src;
 		}
 		for(;src != target; src += 1, dst += 1){
@@ -162,20 +163,16 @@ inline void avx2CopyTest(char* src, char* dst){
 //		char* target = src + sizeof(S);
 //
 //		for (;src < src + sizeof(S); src += 16, dst += 16){
-//			__m512i buffer = _mm512_load_si512((__m512i*)src);
-//			_mm512_stream_si512((__m512i*)dst, buffer);
+//			_mm512_stream_si512((__m512i*)dst, *(__m512i*)src);
 //		}
-//		for (;src < src + sizeof(S); src += 8, dst += 8){
-//			__m256i buffer = _mm256_load_si256((__m256i*)src);
-//			_mm256_stream_si256((__m256i*)dst, buffer);
+//		for (;src <= target - 32; src += 32, dst += 32){
+//			_mm256_store_si256((__m256i*)dst, *(__m256i*)src);
 //		}
-//		for (;src < target - 16; src += 16, dst += 16){
-//			__m128i buffer = _mm_load_si128((__m128i*)src);
-//			_mm_store_si128((__m128i*)dst, buffer);
+//		for (;src <= target - 16; src += 16, dst += 16){
+//			_mm_store_si128((__m128i*)dst, *(__m128i*)src);
 //		}
-//		for(;src < target - 8; src += 8, dst += 8){
-//			__m128i buffer = _mm_loadu_si64(src);
-//			_mm_storeu_si64(dst, buffer);
+//		for(;src <= target - 8; src += 8, dst += 8){
+//			_mm_storeu_si64(dst, *(__m128i*)src);
 //		}
 //		for(;src < target - 4; src += 4, dst += 4){
 //			*(int*)dst = *(int*)src;
@@ -191,104 +188,98 @@ inline void Empty(int*, int*){
 	}
 }
 
-std::pair<double, double> print_stats(std::vector<uint64_t>& inputs)
+void proceed_data(std::vector<uint64_t>& inputs, StructResult& str_res)
 {
-	std::cout << "Here comes the stats"<<std::endl;
 	std::sort(inputs.begin(), inputs.end());
 	auto size = (size_t)(SIZE_OF_STAT * .95f);
 	size_t i;
 	uint64_t min = inputs.front(), max = inputs.back();
 	double mean = 0, variance = 0, std;
 	for(i = 0; i < size; i++){
-		mean += (inputs[i] - min);
+		str_res.mean += (inputs[i] - min);
 	}
-	mean = mean / size + min;
+	str_res.mean = str_res.mean / size + min;
 	for (i = 0; i < size; i++)
 	{
 		variance += std::pow(mean - (int64_t)inputs[i], 2);
 	}
 	variance /= size;
-	std = sqrt(variance);
+	str_res.std = sqrt(variance);
 	std::cout << "\tMin value: " << min << "\n";
 	std::cout << "\tMax value: " << max << "\n";
 	std::cout << "\tMean value: " << mean << "\n";
 	std::cout << "\tVariance: " << variance << "\n";
 	std::cout << "\tSTD: " << std << std::endl;
-	return {mean, std};
 }
 
-template<typename T, typename Function>
-std::pair<double, double> TestFunction(Function f)
+template<typename T, bool CheckCopy = true, typename S>
+StructResult TestFunction(void (*f)(S*, S*))
 {
-	auto src = (T*)_mm_malloc(sizeof(T), 64);
-	auto dst = (T*)_mm_malloc(sizeof(T), 64);
+	StructResult res{0,0};
+	auto volatile src = (T*)_mm_malloc(sizeof(T), 64);
+	auto volatile dst = (T*)_mm_malloc(sizeof(T), 64);
+	for(int i = 0; i < sizeof(T); i++){
+		((char*)src)[i] = (char)i;
+	}
 	std::vector<uint64_t> times(SIZE_OF_STAT, 0);
-	Filltimes<T>(times, f, src, dst);
+	Filltimes<T, S, CheckCopy>(times, f, src, dst);
 	_mm_free(src);
 	_mm_free(dst);
-	return print_stats(times);
+	proceed_data(times, res);
+	return res;
 }
 
 void print_final_results(Results& map){
 
-	for (const auto& [func_name, res_by_struct] : map){
+	for (const auto& [struct_name, res_by_func] : map){
 		double avg = 0, std = 0;
-		std::cout << "\033[0;32mResults for " << func_name << "\n";
-		for (const auto& [struct_name, res] : res_by_struct){
-			avg += res.first;
-			std += res.second;
-			std::cout << "\t" << struct_name << " mean result is "
-			<< res.first << " +/- " << res.second << "\n";
+		std::cout << "Results for \033[0;32m" << struct_name << "\n";
+		for (const auto& [func_name, res] : res_by_func){
+			avg += res.mean;
+			std += res.std;
+			std::cout << "\t\033[0;34m" << func_name << "\033[0m mean result is \033[0;31m"
+					  << res.mean << "\033[0;35m +/- " << res.std << "\033[0m\n";
 		}
-		std::cout << "\t\033[0;34mAverage for all structs is "
-		<< avg / res_by_struct.size() << " +/- "
-		<< std / res_by_struct.size() << "\n";
 	}
 	std::cout << "\033[0m";
 }
 
-int main()
+template<typename T>
+auto TestStruct (const std::string& struct_name = "[struct_name_not_provided]"){
+	std::unordered_map<std::string, StructResult> res_by_func;
+	std::cout << "\033[0;33mChecking " << struct_name << "with size " << sizeof(T) << std::endl;
+	std::cout << "  Checking standard copy operator\n";
+	res_by_func["StandardCopy"] = TestFunction<T>(StandartCopyTest<T>);
+	std::cout << "  Checking memcpy\n";
+	res_by_func["MemcpyTest"] = TestFunction<T>(MemcpyTest<T>);
+	std::cout << "  Checking sse\n";
+	res_by_func["sseCopyTest"] = TestFunction<T>(sseCopyTest<T>);
+	std::cout << "  Checking avx\n";
+	res_by_func["avxCopyTest"] = TestFunction<T>(avxCopyTest<T>);
+	std::cout << "  Checking avx2\n";
+	res_by_func["avx2CopyTest"] = TestFunction<T>(avx2CopyTest<T>);
+//	std::cout << "  Checking avx512\n";
+//	res_by_func["avx512CopyTest"] = TestFunction<T>(avx512CopyTest<T>);
+	std::cout << "\033[0m";
+	return res_by_func;
+}
+
+int main(int argc, char** argv)
 {
+	std::cout.setstate(std::ios_base::failbit);
+	if (argc > 1 && strcmp(argv[1], "--more-info") == 0){
+		std::cout.clear();
+	}
 	Results map;
 	std::cout << "We are gona meassure this shit!\n";
 	std::cout << "\033[0;33mReference value\033[0m\n";
-	map["Reference"]["Empty"] = TestFunction<int>(Empty);
-	std::cout << "\033[0;33mChecking standard copy operator\033[0m\n";
-	map["StandartCopyTest"]["NoPackDesc"] = TestFunction<NoPackDesc>(StandartCopyTest<NoPackDesc>);
-	map["StandartCopyTest"]["PackDesc"] = TestFunction<PackDesc>(StandartCopyTest<PackDesc>);
-	map["StandartCopyTest"]["NoPackMix"] = TestFunction<NoPackMix>(StandartCopyTest<NoPackMix>);
-	map["StandartCopyTest"]["PackMix"] = TestFunction<PackMix>(StandartCopyTest<PackMix>);
-	map["StandartCopyTest"]["ArrStruct"] = TestFunction<ArrStruct>(StandartCopyTest<PackMix>);
-	std::cout << "\033[0;33mChecking memcpy\033[0m\n";
-	map["MemcpyTest"]["NoPackDesc"] = TestFunction<NoPackDesc>(MemcpyTest<NoPackDesc>);
-	map["MemcpyTest"]["PackDesc"] = TestFunction<PackDesc>(MemcpyTest<PackDesc>);
-	map["MemcpyTest"]["NoPackMix"] = TestFunction<NoPackMix>(MemcpyTest<NoPackMix>);
-	map["MemcpyTest"]["PackMix"] = TestFunction<PackMix>(MemcpyTest<PackMix>);
-	map["MemcpyTest"]["ArrStruct"] = TestFunction<ArrStruct>(MemcpyTest<PackMix>);
-	std::cout << "\033[0;33mChecking SSE\033[0m\n";
-	map["sseCopyTest"]["NoPackDesc"] = TestFunction<NoPackDesc>(sseCopyTest<NoPackDesc>);
-	map["sseCopyTest"]["PackDesc"] = TestFunction<PackDesc>(sseCopyTest<PackDesc>);
-	map["sseCopyTest"]["NoPackMix"] = TestFunction<NoPackMix>(sseCopyTest<NoPackMix>);
-	map["sseCopyTest"]["PackMix"] = TestFunction<PackMix>(sseCopyTest<PackMix>);
-	map["sseCopyTest"]["ArrStruct"] = TestFunction<ArrStruct>(sseCopyTest<PackMix>);
-	std::cout << "\033[0;33mChecking AVX\033[0m\n";
-	map["avxCopyTest"]["NoPackDesc"] = TestFunction<NoPackDesc>(avxCopyTest<NoPackDesc>);
-	map["avxCopyTest"]["PackDesc"] = TestFunction<PackDesc>(avxCopyTest<PackDesc>);
-	map["avxCopyTest"]["NoPackMix"] = TestFunction<NoPackMix>(avxCopyTest<NoPackMix>);
-	map["avxCopyTest"]["PackMix"] = TestFunction<PackMix>(avxCopyTest<PackMix>);
-	map["avxCopyTest"]["ArrStruct"] = TestFunction<ArrStruct>(avxCopyTest<PackMix>);
-	std::cout << "\033[0;33mChecking AVX2\033[0m\n";
-	map["avx2CopyTest"]["NoPackDesc"] = TestFunction<NoPackDesc>(avx2CopyTest<NoPackDesc>);
-	map["avx2CopyTest"]["PackDesc"] = TestFunction<PackDesc>(avx2CopyTest<PackDesc>);
-	map["avx2CopyTest"]["NoPackMix"] = TestFunction<NoPackMix>(avx2CopyTest<NoPackMix>);
-	map["avx2CopyTest"]["PackMix"] = TestFunction<PackMix>(avx2CopyTest<PackMix>);
-	map["avx2CopyTest"]["ArrStruct"] = TestFunction<ArrStruct>(avx2CopyTest<PackMix>);
-//	std::cout << "Checking AVX512\n";
-//	map["avx512CopyTest"]["NoPackDesc"] = TestFunction<NoPackDesc>(avx512CopyTest<NoPackDesc>);
-//	map["avx512CopyTest"]["PackDesc"] = TestFunction<PackDesc>(avx512CopyTest<PackDesc>);
-//	map["avx251CopyTest"]["NoPackMix"] = TestFunction<NoPackMix>(avx512CopyTest<NoPackMix>);
-//	map["avx512CopyTest"]["PackMix"] = TestFunction<PackMix>(avx512CopyTest<PackMix>);
-//	map["avx512CopyTest"]["ArrStruct"] = TestFunction<ArrStruct>(avx512CopyTest<PackMix>);
+	map["Reference"]["Empty"] = TestFunction<int, false, int>(Empty);
+	map["NoPackDesc"] = TestStruct<NoPackDesc>("NoPackDesc");
+	map["PackDesc"] = TestStruct<PackDesc>("PackDesc");
+	map["NoPackMix"] = TestStruct<NoPackMix>("NoPackMix");
+	map["PackMix"] = TestStruct<PackMix>("PackMix");
+	map["ArrStruct"] = TestStruct<ArrStruct>("ArrStruct");
+	std::cout.clear();
 	print_final_results(map);
 	return 0;
 }

@@ -1,9 +1,9 @@
 NAME = test_speed
 
 FILES=main.cpp
-OPTIMISATION_LVL= -O0
+OPTIMISATION_LVL= -O3
 AVX_FLAGS= -mavx
-CC_FLAGS = -std=c++17 -fno-prefetch-loop-arrays -fno-unroll-loops -ftree-vectorizer-verbose=1 -fno-gcse -fno-tree-pta -fno-tree-pre
+CC_FLAGS = -std=c++17 -fno-elide-constructors -fno-prefetch-loop-arrays -fno-unroll-loops -ftree-vectorizer-verbose=1 -fno-gcse -fno-tree-pta -fno-tree-pre
 CC = g++
 
 CORE_ISOLATE = 1
@@ -47,7 +47,7 @@ ifeq ("","$(wildcard /etc/default/grub.save)")
 	@sleep 2
 endif
 	$(CC) $(CC_FLAGS) $(AVX_FLAGS) $(OPTIMISATION_LVL) -o $(NAME) $(FILES)
-	taskset 0x00000002 ./$(NAME)
+	taskset -c 1 ./$(NAME) --more-info
 
 clean:
 	rm $(NAME)
