@@ -4,7 +4,7 @@ FILES=main.cpp
 OPTIMISATION_LVL= -O3
 AVX_FLAGS= -mavx
 CC_FLAGS = -std=c++17 -fno-elide-constructors -fno-prefetch-loop-arrays -fno-unroll-loops -ftree-vectorizer-verbose=1 -fno-gcse -fno-tree-pta -fno-tree-pre
-CC = g++
+CC = clang
 
 CORE_ISOLATE = 1
 
