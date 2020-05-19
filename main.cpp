@@ -194,14 +194,14 @@ void proceed_data(std::vector<uint64_t>& inputs, StructResult& str_res)
 	auto size = (size_t)(SIZE_OF_STAT * .95f);
 	size_t i;
 	uint64_t min = inputs.front(), max = inputs.back();
-	double mean = 0, variance = 0, std;
+	double variance = 0, std;
 	for(i = 0; i < size; i++){
 		str_res.mean += (inputs[i] - min);
 	}
 	str_res.mean = str_res.mean / size + min;
 	for (i = 0; i < size; i++)
 	{
-		variance += std::pow(mean - (int64_t)inputs[i], 2);
+		variance += std::pow(str_res.mean - (int64_t)inputs[i], 2);
 	}
 	variance /= size;
 	str_res.std = sqrt(variance);
